@@ -84,7 +84,7 @@ define(['N/record', 'N/search'], (record, search) => {
                          * Added update to check customer in Sales Order to set Integration status in Invoice record
                         */
                         var intCustomer = orderLookup.entity[0].value;
-                        var arrCustomers = ['2515', '2516'];
+                        var arrCustomers = ['2515', '2516','1754']; // JPG 07/11/2023 added sam's club
 
                         //customer value lookup for integration status
                         var objCustomer = record.load({
@@ -93,7 +93,7 @@ define(['N/record', 'N/search'], (record, search) => {
                         })
                         var customerParent = objCustomer.getValue({fieldId: 'parent'});
                         log.debug('customerParent', customerParent);
-                        if(arrCustomers.indexOf(intCustomer) > -1 || (customerParent == '2515' || customerParent == '2516')){
+                        if(arrCustomers.indexOf(intCustomer) > -1 || (customerParent == '2515' || customerParent == '2516' || customerParent == '1754')){
                             recTran.setValue({fieldId: 'custbodyintegrationstatus', value: 1});
 							//Erick Dela Rosa 05/04/2023: Added setting of custbody_sps_foblocationqualifier and custbody_sps_fobpaycode
 							recTran.setValue({fieldId: 'custbody_sps_foblocationqualifier', value: 'OR'});
