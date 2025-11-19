@@ -197,12 +197,22 @@ define(dependencies,function(TMPLMRGRCONS,TMPLMRGRCustom,record,search,runtime,f
 									let objParsedColumn = {...objColumn}
 									
 									//cleanup values
-									if(objParsedColumn.type == 'checkbox'){
+									if(objParsedColumn.type == 'checkbox' || util.isBoolean(strValue)){
 										//do not enclose boolean in quotes
+
+										if(util.isBoolean)
+											strValue = (strValue)?'Yes':'No';	
 										strValue = (strValue || false);
-									}else{						
+									}else{			
+
+										//replace - None -
+
+										strValue = strValue || "";
+										strValue = strValue.replace('- None -',"");
+
 										strValue = strValue.replace(/[^A-Za-z0-9_ ]/g, '\$&');
 										strValue = strValue.trim();
+										// log.debug(`${objColumn.label} = ${strValue}`)
 
 										if(objParsedColumn.type == 'date' && strValue != ""){
 
@@ -326,16 +336,6 @@ define(dependencies,function(TMPLMRGRCONS,TMPLMRGRCustom,record,search,runtime,f
         				objRecordToUpdate.setValue({fieldId : fieldId, value : objSubmitFields[fieldId]});
         			})
 
-        			//temp for workorder buildable and sent
-        			if(objRecordToUpdate.type == 'workorder'){
-        				let objLookups = search.lookupFields({...objRecordInfo, columns : ['buildable','custbody_tfg_senttoby']});
-        				let intBuildable = parseInt(objLookups.buildable || 0);
-
-        				log.audit('Update SENT for WORKORDER',intBuildable);
-        				objRecordToUpdate.setValue({fieldId : 'custbody_tfg_senttoby', value : intBuildable});
-
-        			}
-
         			objRecordToUpdate.save({ignoreMandatoryFields : true});
 
         			log.debug('SUCCESS RECORDLOAD-SAVE')            		
@@ -424,6 +424,7 @@ define(dependencies,function(TMPLMRGRCONS,TMPLMRGRCustom,record,search,runtime,f
 			arrColumns.push(search.createColumn({name : TMPLHEADER.FIELDS.FILENAME}))
 			arrColumns.push(search.createColumn({name : TMPLHEADER.FIELDS.TYPE}))
 			arrColumns.push(search.createColumn({name : TMPLHEADER.FIELDS.FOLDER}))
+          	arrColumns.push(search.createColumn({name : TMPLHEADER.FIELDS.INFOLDER}))
 			arrColumns.push(search.createColumn({name : TMPLHEADER.FIELDS.AFTEREXPORT}))
 			arrColumns.push(search.createColumn({name : TMPLHEADER.FIELDS.FILETYPE}))
 
@@ -436,6 +437,7 @@ define(dependencies,function(TMPLMRGRCONS,TMPLMRGRCustom,record,search,runtime,f
 				objReturn.FILENAME = objRow.getValue(arrColumns[intCounter++]) || false;
 				objReturn.TYPE = objRow.getValue(arrColumns[intCounter++]) || false;
 				objReturn.FOLDER = objRow.getValue(arrColumns[intCounter++]) || false;
+              	objReturn.INFOLDER = objRow.getValue(arrColumns[intCounter++]) || false;
 				objReturn.AFTEREXPORT = objRow.getValue(arrColumns[intCounter++]) || false;
 				objReturn.FILETYPE = objRow.getValue(arrColumns[intCounter++]) || false;
 

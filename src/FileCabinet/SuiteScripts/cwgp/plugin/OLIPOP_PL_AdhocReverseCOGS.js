@@ -1,3 +1,4 @@
+
 /**
 *  Date     : 11 May 2023
 *  Author   : Erick Dela Rosa
@@ -61,8 +62,8 @@ function customizeGlImpact(transactionRecord, standardLines, customLines, book)
 		//nlapiLogExecution('AUDIT', 'orderSource', orderSource);
 		//nlapiLogExecution('AUDIT', 'salesChannel', salesChannel);
 
-		//if (stDiscountCode == "DEV100" && dtOrderDate >= dtStartDate && dtOrderDate < dtEndDate && dtCreatedDate < dtScriptCreatedDate) {
-        if (stDiscountCode == "DEV100" && dtOrderDate >= dtStartDate && dtOrderDate < dtEndDate) {
+        //if (salesChannel == '2' && orderSource == '3'){
+		if (stDiscountCode == "DEV100" && dtOrderDate >= dtStartDate && dtOrderDate < dtEndDate && dtCreatedDate < dtScriptCreatedDate) {
             for (var i=0; i < lineCount; i++) {
 			    var line =  standardLines.getLine(i);
 

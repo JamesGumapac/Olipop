@@ -1,16 +1,17 @@
 /**
- * @NApiVersion 2.x
+ * @NApiVersion 2.1
  * @NScriptType MapReduceScript
  * @NModuleScope SameAccount
  */
 
 /**
- * Author: Erick Dela Rosa
+ * Author: eddelarosa
  * Reference: OPOP_0028
  * Date: 24 Jan 2023
  * 
  *  Date Modified       Modified By                 Notes
- *  24 Jan 2023         Erick Dela Rosa             Initial Development
+ *  24 Jan 2023         eddelarosa                  Initial Development
+ *  24 Sep 2024         eddelarosa                  Added a logic to support sending of email to Olipop emails if the customer has no non-Olipop emails
  * 
  * 
  */
@@ -23,13 +24,15 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 	var intTargetMinute = 0;
 	var intTargetSecond = 0;
 	var EMAIL_PARAMETERS = {
-		AUTHOR: 433710 //CW Global Partners - 433710, Olipop AR - 1225141
+		AUTHOR: 1848767 //CW Global Partners - 433710, Olipop AR - 1225141, Olipop Customer - 1848767
 	};
 	
 	var stSentDateCustomFieldID = 'custbody_cwgp_invoicesentdate';
 	
-	var intInvoiceSearchID = 2351;//SB - 2351, Production - 2384
-	var intCustomerContactEmailSearchID = 2350;//SB - 2350, Production - 2383
+	var intInvoiceSearchID = 2384;//SB - 2351, Production - 2384
+	var intCustomerContactEmailSearchID = 2383;//SB - 2350, Production - 2383
+   
+	const intMaxInvoiceBatchSize = 200;
    
     /**
      * Marks the beginning of the Map/Reduce process and generates input data.
@@ -114,6 +117,9 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 		dtTargetDate.setMinutes(intTargetMinute);
 		dtTargetDate.setSeconds(intTargetSecond);
 		
+		let arrInvoiceSummary = [];
+		let objInvoiceSummary = {};
+		
 		var objPagedData = objInvoiceSearch.runPaged();
 		objPagedData.pageRanges.forEach(function(pageRange){
 			var objPage = objPagedData.fetch({index: pageRange.index});
@@ -124,18 +130,63 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 				var intCustomerInternalID = result.getValue(objCustomerInternalIDColumn);
 				//log.debug('stDateCreated',stDateCreated);
 				var dtDateCreated = new Date(stDateCreated);
-				//if (dtDateCreated >= dtTargetDate) {
+				if (dtDateCreated >= dtTargetDate) {
 				//if (dtDateCreated <= dtTargetDate) { //if statement for testing purposes
+					
+					let intInvoiceSummaryIndex = -1, intBatch = 1;
+					
+					arrInvoiceSummary.forEach(function(summary,summaryindex){
+						if (summary.parentID == intCustomerParentID) {
+							if (summary.count < intMaxInvoiceBatchSize) intInvoiceSummaryIndex = summaryindex;
+							if (summary.count <= intMaxInvoiceBatchSize) {
+								intBatch = summary.batch;
+								if (summary.count == intMaxInvoiceBatchSize) intBatch = summary.batch + 1;
+							}
+						}
+					});
+					
+					let intCustomerParentID_batch = '';
+					
+					if (intInvoiceSummaryIndex == -1) {
+						objInvoiceSummary = {};
+						objInvoiceSummary.batch = intBatch;
+						objInvoiceSummary.count = 1;
+						objInvoiceSummary.parentID = intCustomerParentID;
+						arrInvoiceSummary.push(objInvoiceSummary);
+						intCustomerParentID_batch = intCustomerParentID + '_' + objInvoiceSummary.batch;
+						//log.debug('objInvoiceSummary',objInvoiceSummary);					
+					} else {
+						
+						arrInvoiceSummary[intInvoiceSummaryIndex].count++;
+						intCustomerParentID_batch = intCustomerParentID + '_' + arrInvoiceSummary[intInvoiceSummaryIndex].batch;
+						
+						//log.debug('arrInvoiceSummary[intInvoiceSummaryIndex]',arrInvoiceSummary[intInvoiceSummaryIndex]);						
+					}
+				
 					var objRawResult = {};
 					objRawResult.customerParentID = intCustomerParentID;
 					objRawResult.invoiceResult = result;
+					objRawResult.batch = intBatch;
+					objRawResult.customerParentID_batch = intCustomerParentID_batch;
 					arrInvoiceData.push(objRawResult);
+					//log.debug('objRawResult',objRawResult);
+					//log.debug('document number',result.getValue('tranid'));
 					if (arrCustomerIDs.indexOf(intCustomerParentID) == -1) arrCustomerIDs.push(intCustomerParentID);
 					if (arrCustomerIDs.indexOf(intCustomerInternalID) == -1) arrCustomerIDs.push(intCustomerInternalID);
-				//}
+					
+				}
 				
 			});//objPage.data.forEach(function(result) end
 		});//objPagedData.pageRanges.forEach(function(pageRange) end
+		
+		arrInvoiceData.forEach(function(invoice,invoiceindex){
+			let intCustomerParentID = invoice.customerParentID;
+			let arrParentBatchList = arrInvoiceSummary.filter(summary => summary.parentID == intCustomerParentID);
+			let intHighestBatchNumber = arrParentBatchList.reduce((max,list) => {
+				return list.batch > max ? list.batch : max;
+			}, arrParentBatchList[0].batch);
+			arrInvoiceData[invoiceindex].parentTotalBatches = intHighestBatchNumber;
+		});
 		
 		var objInvoiceData = {};
 		objInvoiceData.invoiceData = arrInvoiceData;
@@ -231,6 +282,9 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 			objInvoiceWithContactEmail = {};
 			objInvoiceWithContactEmail = JSON.parse(JSON.stringify(rawresult.invoiceResult));
 			objInvoiceWithContactEmail.contactEmails = [];
+			objInvoiceWithContactEmail.batch = rawresult.batch;
+			objInvoiceWithContactEmail.parentTotalBatches = rawresult.parentTotalBatches;
+			objInvoiceWithContactEmail.customerParentID_batch = rawresult.customerParentID_batch;
 			arrCustomerContactEmails.forEach(function(contactemail){
 				if (contactemail.parentID == intCustomerParentID) {
 					objInvoiceWithContactEmail.parentCompanyName = contactemail.parentCompanyName;
@@ -258,14 +312,17 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 		var objSearchResult = JSON.parse(context.value);
 		//log.debug('objSearchResult',JSON.stringify(objSearchResult));
 		
-		var intCustomerParentID = objSearchResult.values['customerMain.parent'][0].value;
+		//var intCustomerParentID = objSearchResult.values['customerMain.parent'][0].value;
 		var objSearchResultValues = objSearchResult.values;
 		objSearchResultValues.id = objSearchResult.id;
 		objSearchResultValues.parentCompanyName = objSearchResult.parentCompanyName;
 		objSearchResultValues.contactEmails = objSearchResult.contactEmails;
+		objSearchResultValues.batch = objSearchResult.batch;
+		objSearchResultValues.parentTotalBatches = objSearchResult.parentTotalBatches;
 		
 		context.write({
-			key: intCustomerParentID,
+			//key: intCustomerParentID,
+			key: objSearchResult.customerParentID_batch,
 			value: objSearchResultValues
 		});
     }//map end
@@ -285,58 +342,160 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 		var stCustomerParent = JSON.parse(arrSearchValues[0]).parentCompanyName;
 		var arrCustomerContactEmails = JSON.parse(arrSearchValues[0]).contactEmails;
 		
+		let intBatch = JSON.parse(arrSearchValues[0]).batch;
+		let intTotalBatches = JSON.parse(arrSearchValues[0]).parentTotalBatches;
+		
 		var objRecipients = getRecipients(arrCustomerContactEmails);
 		
-		var dtToday = new Date();
+		//var dtToday = new Date();
+		var stDateCreated = JSON.parse(arrSearchValues[0]).datecreated;
+		var dtToday = new Date(stDateCreated);
 		var stToday = format.format({
 			type: format.Type.DATE,
 			value: dtToday
 		});
 		var stSubject = stToday + ' Olipop Invoices for ' + stCustomerParent;
 		
-		var stMessage = '<p>Hello,</p>';
-		stMessage += '<br/>';
-		stMessage += '<p>Attached please find the latest Olipop invoice(s) for ' + stCustomerParent + '</p>';
-		stMessage += '<ul>';
+		let stMessagePartA = '<p>Hello,</p>';
+		stMessagePartA += '<br/>';
+		stMessagePartA += '<p>Attached please find the latest Olipop invoice(s) for ' + stCustomerParent + '</p>';
+		stMessagePartA += '<ul>';
 		
-		var arrAttachments = [];
-		arrSearchValues.forEach(function(searchvalue){
+		let stMessagePartB = '';
+		
+		let stMessagePartC = '</ul>';
+		stMessagePartC += '<br/>';
+		stMessagePartC += '<p>Please let us know if you have any questions.</p>';
+		stMessagePartC += '<br/>';
+		stMessagePartC += '<p>As always, thank you for your business!</p>';
+		
+		let arrAttachments = [];
+		
+		arrSearchValues.forEach(function(searchvalue,searchvalueindex){
 			var objSearchValue = JSON.parse(searchvalue);
-			stMessage += '<li>';
-			stMessage += objSearchValue.tranid + '&nbsp;&nbsp;&nbsp;&nbsp;';
-			stMessage += objSearchValue['customerMain.companyname'] + '&nbsp;&nbsp;&nbsp;&nbsp;';
-			stMessage += 'PO#' + objSearchValue.otherrefnum;
-			stMessage += '</li>';
+			
 			try {
 				var objInvoicePDFFile = render.transaction({
 					entityId: parseInt(objSearchValue.id),
 					printMode: render.PrintMode.PDF
 				});
+				
+				stMessagePartB += '<li>';
+				stMessagePartB += objSearchValue.tranid + '&nbsp;&nbsp;&nbsp;&nbsp;';
+				stMessagePartB += objSearchValue['customerMain.companyname'] + '&nbsp;&nbsp;&nbsp;&nbsp;';
+				stMessagePartB += 'PO#' + objSearchValue.otherrefnum;
+				stMessagePartB += '</li>';
+				
 				arrAttachments.push(objInvoicePDFFile);
+				
 			} catch (e) {
 				log.debug('invoice pdf render error',e);
-			}
-		});
+			}//try {
+				
+		});//arrSearchValues.forEach(function(searchvalue,searchvalueindex)
 		
-		stMessage += '</ul>';
-		stMessage += '<br/>';
-		stMessage += '<p>Please let us know if you have any questions.</p>';
-		stMessage += '<br/>';
-		stMessage += '<p>As always, thank you for your business!</p>';
-		//temporary added to message
-		/*stMessage += '<br/>';
-		stMessage += '<p>recipients:' + arrCustomerContactEmails.toString() + '</p>';*/
-		log.debug('stMessage',stMessage);
+		log.debug('arrAttachments length',arrAttachments.length);
+		log.debug('arrAttachments',arrAttachments);
 		
 		var objEmailSendParameters = {};
 		objEmailSendParameters.author = EMAIL_PARAMETERS.AUTHOR;
 		//objEmailSendParameters.recipients = arrCustomerContactEmails;
 		//objEmailSendParameters.recipients = EMAIL_PARAMETERS.AUTHOR;
 		objEmailSendParameters.subject = stSubject;
-		objEmailSendParameters.body = stMessage;
-		if (arrAttachments.length > 0) objEmailSendParameters.attachments = arrAttachments;
+		//objEmailSendParameters.body = stMessage;
+		
+		/*let flTotalFileSize = 0;
+		let arrAttachmentsList = [], intListCount = 1;
+		let objAttachmentsList = {};
+		objAttachmentsList.attachments = [];
+		objAttachmentsList.count = intListCount;
+		
+		arrSearchValues.forEach(function(searchvalue,searchvalueindex){
+			var objSearchValue = JSON.parse(searchvalue);
+			
+			try {
+				var objInvoicePDFFile = render.transaction({
+					entityId: parseInt(objSearchValue.id),
+					printMode: render.PrintMode.PDF
+				});
+				let flFileSize = objInvoicePDFFile.size;
+				log.debug('file size',flFileSize);				
+				
+				let blNewMessage = false;
+				
+				if (flMessageSize >=  flTotalFileSize + flFileSize) {
+					flTotalFileSize += flFileSize;
+					log.debug('total file size',flTotalFileSize);
+				} else {
+					objAttachmentsList.message = stMessagePartA + stMessagePartB + stMessagePartC;
+					arrAttachmentsList.push(objAttachmentsList);
+					log.debug('message',objAttachmentsList.message);
+					blNewMessage = true;
+					if (arrSearchValues.length > searchvalueindex + 1) {
+						stMessagePartB = '';
+						flTotalFileSize = 0;
+						objAttachmentsList = {};
+						intListCount++;
+						objAttachmentsList.attachments = [];
+						objAttachmentsList.count = intListCount;
+					}
+				}//if (flMessageSize >=  flTotalFileSize + flFileSize)
+				
+				stMessagePartB += '<li>';
+				stMessagePartB += objSearchValue.tranid + '&nbsp;&nbsp;&nbsp;&nbsp;';
+				stMessagePartB += objSearchValue['customerMain.companyname'] + '&nbsp;&nbsp;&nbsp;&nbsp;';
+				stMessagePartB += 'PO#' + objSearchValue.otherrefnum;
+				stMessagePartB += '</li>';
+				
+				objAttachmentsList.attachments.push(objInvoicePDFFile);
+				
+				if (arrSearchValues.length == searchvalueindex + 1 && !blNewMessage) {
+					objAttachmentsList.message = stMessagePartA + stMessagePartB + stMessagePartC;
+					arrAttachmentsList.push(objAttachmentsList);
+					log.debug('message',objAttachmentsList.message);
+				}
+			} catch (e) {
+				log.debug('invoice pdf render error',e);
+			}//try {
+				
+		});//arrSearchValues.forEach(function(searchvalue,searchvalueindex)
+		
+		log.debug('arrAttachmentsList length',arrAttachmentsList.length);
+		log.debug('arrAttachmentsList',arrAttachmentsList);
+		
+		var objEmailSendParameters = {};
+		objEmailSendParameters.author = EMAIL_PARAMETERS.AUTHOR;
+		//objEmailSendParameters.recipients = arrCustomerContactEmails;
+		//objEmailSendParameters.recipients = EMAIL_PARAMETERS.AUTHOR;
+		objEmailSendParameters.subject = stSubject;
+		//objEmailSendParameters.body = stMessage;*/
 		
 		try {
+			/*arrAttachmentsList.forEach(function(list,listindex){
+				intListCount = parseInt(listindex) + 1;
+				if (arrAttachmentsList.length > 1) objEmailSendParameters.subject = stSubject + ' (' + intListCount + '/' + arrAttachmentsList.length + ')';
+				objEmailSendParameters.attachments = list.attachments;
+				objEmailSendParameters.body = list.message;
+				if (arrCustomerContactEmails.length <= 10) {
+					objEmailSendParameters.recipients = objRecipients.customerRecipients;
+					if (objRecipients.olipopRecipients) objEmailSendParameters.cc = objRecipients.olipopRecipients;
+					email.send(objEmailSendParameters);
+				} else {
+					objRecipients.customerRecipients.forEach(function(emailgroup){
+						objEmailSendParameters.recipients = emailgroup;
+						email.send(objEmailSendParameters);
+					});
+					objRecipients.olipopRecipients.forEach(function(emailgroup){
+						objEmailSendParameters.recipients = emailgroup;
+						email.send(objEmailSendParameters);
+					});
+				}
+			});*/
+			
+			if (intTotalBatches > 1) objEmailSendParameters.subject = stSubject + ' (' + intBatch + '/' + intTotalBatches + ')';
+			objEmailSendParameters.attachments = arrAttachments;
+			objEmailSendParameters.body = stMessagePartA + stMessagePartB + stMessagePartC;
+			
 			if (arrCustomerContactEmails.length <= 10) {
 				objEmailSendParameters.recipients = objRecipients.customerRecipients;
 				if (objRecipients.olipopRecipients) objEmailSendParameters.cc = objRecipients.olipopRecipients;
@@ -344,26 +503,14 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 			} else {
 				objRecipients.customerRecipients.forEach(function(emailgroup){
 					objEmailSendParameters.recipients = emailgroup;
-					//temporary added to message
-					/*var stTempMessage = stMessage;
-					stTempMessage += '<br/>';
-					stTempMessage += '<p>recipients:' + emailgroup.toString() + '</p>';
-					objEmailSendParameters.body = stTempMessage;*/
-					//temporary
 					email.send(objEmailSendParameters);
 				});
 				objRecipients.olipopRecipients.forEach(function(emailgroup){
 					objEmailSendParameters.recipients = emailgroup;
-					//temporary added to message
-					/*var stTempMessage = stMessage;
-					stTempMessage += '<br/>';
-					stTempMessage += '<p>recipients:' + emailgroup.toString() + '</p>';
-					objEmailSendParameters.body = stTempMessage;*/
-					//temporary
 					email.send(objEmailSendParameters);
 				});
 			}
-			
+				
 			var objValueParams = {};
 			objValueParams[stSentDateCustomFieldID] = stToday;
 			
@@ -376,6 +523,7 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 					values: objValueParams
 				});
 			});
+			
 		} catch (e) {
 			log.debug('email parameters',objEmailSendParameters);
 			log.debug('email sending error',e);
@@ -406,6 +554,7 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 				if (email.indexOf('drinkolipop.com') > -1) arrOlipopRecipients.push(email);
 				else arrCustomerRecipients.push(email);
 			});
+            if (arrCustomerRecipients.length == 0) arrCustomerRecipients = arrOlipopRecipients;
 		} else {
 			arrCustomerContactEmails.forEach(function(email){
 				if (email.indexOf('drinkolipop.com') > -1) {		

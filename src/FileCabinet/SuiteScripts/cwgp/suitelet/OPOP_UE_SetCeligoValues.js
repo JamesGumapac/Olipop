@@ -12,20 +12,20 @@
             var eventType = context.type;
             
             if(eventType =='create'){
-                var objTran = record.load({
+                var objSO = record.load({
                     type: strRecordType,
                     id: intRecordId,
                     isDynamic: true
                 });
 
-                var celigoTaxRate = objTran.getValue({fieldId: 'custbody_cwgp_celigotaxrate'});
+                var celigoTaxRate = objSO.getValue({fieldId: 'custbody_cwgp_celigotaxrate'});
                 log.debug('celigoTaxRate', celigoTaxRate);
                 if(celigoTaxRate){
-                    objTran.setValue({fieldId: 'taxrate', value: celigoTaxRate});
+                    objSO.setValue({fieldId: 'taxrate', value: celigoTaxRate});
                 }
 
-                var idTran = objTran.save();
-                log.debug('idTran', idTran);
+                var idSO = objSO.save();
+                log.debug('idSO', idSO);
             }
 
         } catch (ex) {

@@ -1,7 +1,7 @@
 <file>
-  <availablewithoutlogin>F</availablewithoutlogin>
+  <availablewithoutlogin>T</availablewithoutlogin>
   <bundleable>F</bundleable>
-  <description></description>
+  <description>Error File, External Ref: 247282</description>
   <generateurltimestamp>F</generateurltimestamp>
   <hideinbundle>F</hideinbundle>
   <isinactive>F</isinactive>

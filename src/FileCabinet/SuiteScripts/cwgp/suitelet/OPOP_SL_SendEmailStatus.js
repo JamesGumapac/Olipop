@@ -31,7 +31,9 @@
 };
 
 var __CONFIG = {
-    CS_PATH : '64996' //OPOP_CS_SendEmailStatus.js
+    //OPOP_CS_SendEmailStatus.js
+    CS_PATH : '183954' //PROD
+           // '64996' //SB 
 };
 
 var LOG_NAME;

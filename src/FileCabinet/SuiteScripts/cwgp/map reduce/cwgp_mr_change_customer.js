@@ -21,7 +21,6 @@ define(['N/record', 'N/runtime', 'N/search'],
          * @returns {Array|Object|Search|ObjectRef|File|Query} The input data to use in the map/reduce process
          * @since 2015.2
          */
-
         const getInputData = (inputContext) => {
             try {
                 log.audit("GET INPUT DATA")
@@ -34,8 +33,6 @@ define(['N/record', 'N/runtime', 'N/search'],
                 log.error("getInputData", e.message)
             }
         }
-
-
         /**
          * Defines the function that is executed when the reduce entry point is triggered. This entry point is triggered
          * automatically when the associated map stage is complete. This function is applied to each group in the provided context.
@@ -55,21 +52,82 @@ define(['N/record', 'N/runtime', 'N/search'],
             let reduceObj = JSON.parse(reduceContext.values)
             try {
                 log.debug("reduceContext", reduceObj)
-                const replaceMentCusstomerId = runtime.getCurrentScript().getParameter("custscript_cwgp_change_to")
-                record.submitFields({
-                    type: reduceObj.recordType,
-                    id: reduceObj.id,
-                    values: {
-                        "entity": replaceMentCusstomerId
-                    },
-                    ignoreMandatoryFields: true
-                })
+                const replaceMentCusstomerId = runtime.getCurrentScript().getParameter("custscript_cwgp_change_to");
+
+
+                /* SUGGESTED SOLUTION BY
+
+                NETSUITE SUPPORT
+
+                */
+
+                //Scenario 1: When transction is an invoice
+                if (reduceObj.recordType == "invoice") {
+
+                    //Scenario 1.1: When Created From value is not null or empty. When Invoice is not standalone
+                    log.debug("SalesOrderLocation " ,reduceObj.createdFrom.location.value )
+                    if (reduceObj.createdFrom.location.value != '' && reduceObj.createdFrom.location.value != null) {
+
+                        record.submitFields({
+                            type: reduceObj.recordType,
+                            id: reduceObj.id,
+                            values: {
+                                "entity": replaceMentCusstomerId,
+                                "location": reduceObj.createdFrom.location.value,
+                            },
+                            ignoreMandatoryFields: true
+                        });
+                    } else {
+
+                        //Scenario 1.2: When the invoice is a standalone or no location set in the Sales Order record.
+
+
+                        record.submitFields({
+                            type: reduceObj.recordType,
+                            id: reduceObj.id,
+                            values: {
+                                "entity": replaceMentCusstomerId,
+                                "location": 111,
+                            },
+                            ignoreMandatoryFields: true
+                        });
+                    }
+
+                    //Scenario 2: When transaction is Journal.
+
+                } else if (reduceObj.recordType == "journalentry") {
+                    var journalObj = record.load({
+                        type: record.Type.JOURNAL_ENTRY,
+                        id: reduceObj.id
+
+                    });
+                    const totalLine = journalObj.getLineCount({
+                        sublistId: "line"
+                    });
+                    for (let i = 0; i < totalLine; i++) {
+                        let entityToChange = journalObj.getSublistValue({
+                            sublistId: 'line',
+                            fieldId: 'entity',
+                            line: i,
+                            value: replaceMentCusstomerId
+                        });
+                        if (entityToChange == 831) { //10007 UNFI GREENWOOD
+                            journalObj.setSublistValue({
+                                sublistId: 'line',
+                                fieldId: 'entity',
+                                line: i,
+                                value: replaceMentCusstomerId
+                            });
+                        }
+                    }
+                    journalObj.save();
+
+
+                }
             } catch (e) {
-                log.error("reduce", {error:e.message, type: reduceObj.recordType, id: reduceObj.id})
+                log.error("reduce", {error: e.message, type: reduceObj.recordType, id: reduceObj.id})
             }
         }
-
-
         /**
          * Defines the function that is executed when the summarize entry point is triggered. This entry point is triggered
          * automatically when the associated reduce stage is complete. This function is applied to the entire result set.
@@ -90,10 +148,6 @@ define(['N/record', 'N/runtime', 'N/search'],
          * @since 2015.2
          */
         const summarize = (summaryContext) => {
-
         }
-
-
         return {getInputData, reduce, summarize}
-
     });

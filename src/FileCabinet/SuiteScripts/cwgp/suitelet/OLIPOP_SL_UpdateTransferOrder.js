@@ -1,6 +1,6 @@
 //OLIPOP_SL_UpdateTransferOrder.js
 /**
- * @NApiVersion 2.x
+ * @NApiVersion 2.1
  * @NScriptType Suitelet
  * @NModuleScope SameAccount
  */
@@ -48,6 +48,10 @@ function(record, runtime, search, serverWidget, url, redirect, file, render, xml
 			deploymentId: objScript.deploymentId,
 			returnExternalUrl: true,
 		});
+		let csPath = objScript.getParameter({
+			name: genPR.SCRIPT_PARAMETERS.CLIENTSCRIPT
+		});
+	   	objForm.clientScriptModulePath = csPath;
 		
 		//objForm.clientScriptFileId = genPR.SCRIPT_PARAMETERS.CLIENTSCRIPT;
     	
@@ -129,6 +133,29 @@ function(record, runtime, search, serverWidget, url, redirect, file, render, xml
 			}
     		}
     		
+			if(strAction=='filter'){
+				var FromLocation = context.request.parameters[genPR.FORM_ELEMENTS.FILTERS.FromLocation.ID]
+				var ToLocation = context.request.parameters[genPR.FORM_ELEMENTS.FILTERS.ToLocation.ID]
+				var PriorityLoad = context.request.parameters[genPR.FORM_ELEMENTS.FILTERS.PriorityLoad.ID]
+				var Status = context.request.parameters[genPR.FORM_ELEMENTS.FILTERS.Status.ID]
+				var TransferOrderID = context.request.parameters[genPR.FORM_ELEMENTS.FILTERS.TransferOrderID.ID]
+				var LoadID = context.request.parameters[genPR.FORM_ELEMENTS.FILTERS.LoadID.ID]
+				var Page = context.request.parameters[genPR.FORM_ELEMENTS.FILTERS.Page.ID];
+
+				var objFilters = {
+					"FromLocation"	: FromLocation,
+					"ToLocation"	: ToLocation,
+					"PriorityLoad"	: PriorityLoad,
+					"Status"		: Status,
+					"TransferOrderID" : TransferOrderID,
+					"LoadID"		: LoadID,
+					"Page"			: Page
+				}
+				var strPageTitle = 'VIEW FILTERED TRANSFER ORDERS'
+				buildFormHeaderView({objForm: objForm, strPageTitle: strPageTitle, strText: strHtml})
+				generateTransferOrderList({strSuiteletId: strSuiteletId, intEmpId: viewEmployeeId, objForm: objForm, genPR: genPR, objFilters: objFilters});
+			}
+
     		if (strAction=='back'){
             	var objHtmlFileIds = runtime.getCurrentScript().getParameter({name: genPR.SCRIPT_PARAMETERS.HTML_FILE_ID});
             	log.debug ('objHtmlFileIds', objHtmlFileIds);
@@ -947,15 +974,21 @@ function(record, runtime, search, serverWidget, url, redirect, file, render, xml
     }
     
     function generateTransferOrderList(options) {
+		try {
     	 var objForm = options.objForm;
+		 var objFilterVal = options.objFilters || '';
     	 var genLib = options.genPR;
+		 var objFieldGroup = genPR.FORM_ELEMENTS.FIELD_GROUPS;
     	 var intEmpId = options.intEmpId;
     	 var strSuiteletId = options.strSuiteletId;
     	 var objID = genLib.FORM_ELEMENTS.REVIEW_MENU.TransferOrderList;
     	 var objFields = genLib.FORM_ELEMENTS.MAIN_HEADERS;
+		 var objFilters = genLib.FORM_ELEMENTS.FILTERS;
     	 var objSearch = genLib.SAVED_SEARCH;
     	 var objTransferOrder = genLib.TRANSFER_ORDER;
     	 var objValues = {};
+		 var objPageField;
+		 var currentPage = !isEmpty(objFilterVal.Page) ? objFilterVal.Page : 0;
     	 
       	var empId = objForm.addField({
  		    id : objFields.EmployeeID.ID,
@@ -964,8 +997,34 @@ function(record, runtime, search, serverWidget, url, redirect, file, render, xml
     	 }).updateDisplayType({
     		 displayType: serverWidget.FieldDisplayType.HIDDEN
     	 });
-     	
      	empId.defaultValue = intEmpId;
+
+ 		objForm.addFieldGroup({
+		    id : objFieldGroup.Filters.ID,
+		    label : objFieldGroup.Filters.LABEL
+    	});
+
+		Object.keys(objFilters).forEach((key)=>{
+			if(key !== 'Page'){
+				objForm.addField({
+					id : objFilters[key].ID,
+					type : serverWidget.FieldType[objFilters[key].TYPE],
+					label : objFilters[key].LABEL,
+					source: objFilters[key].SOURCE,
+					container : objFieldGroup.Filters.ID
+				});
+			} 
+			else {
+				objPageField = objForm.addField({
+					id : objFilters[key].ID,
+					type : serverWidget.FieldType[objFilters[key].TYPE],
+					label : objFilters[key].LABEL,
+					container : objFieldGroup.Filters.ID
+				});
+			}
+			
+		})
+     	
     	 
     	 var sublistItem = objForm.addSublist({
              id: objID.ID,
@@ -1011,6 +1070,12 @@ function(record, runtime, search, serverWidget, url, redirect, file, render, xml
              label       : objFields.Quantity.LABEL
          });
     	 
+		 sublistItem.addField({
+			id          : objFields.FromLocation.ID,
+			type        : serverWidget.FieldType[objFields.FromLocation.TYPE],
+			label       : objFields.FromLocation.LABEL
+		});
+
     	 sublistItem.addField({
              id          : objFields.Location.ID,
              type        : serverWidget.FieldType[objFields.Location.TYPE],
@@ -1091,179 +1156,292 @@ function(record, runtime, search, serverWidget, url, redirect, file, render, xml
          		name: objTransferOrder.FIELDS.CARRIER,
          		operator: search.Operator.ANYOF,
          		values:  parseInt(intEmpId) }));
-         	
-            ssTransactionSearch.run().each(function (results){
-                var intId = results.getText({name: objTransferOrder.FIELDS.ID});
-                var intItem = results.getValue({name: objSearch.FORMULA.ID, formula: objSearch.FORMULA.FORMULA});
-                var intQty = results.getValue({name: objTransferOrder.SUBLISTS.FIELDS.QTY});
-                var strLocation = results.getText({name: objTransferOrder.FIELDS.TOLOCATION});
-                var strDocId = results.getValue({name: objTransferOrder.FIELDS.ORDERNUM});
-                var dtPickup = results.getValue({name: objTransferOrder.FIELDS.PICKUPDATE});
-                var dtDelivery = results.getValue({name: objTransferOrder.FIELDS.DELIVERYDATE});
-                var strStatus = results.getText({name: objTransferOrder.FIELDS.STATUS});
-                var strMemo = results.getValue({name: objTransferOrder.FIELDS.MEMO});
-                var intLoad = results.getValue({name: objTransferOrder.FIELDS.LOADID});
-                var intPriority = results.getText({name: objTransferOrder.FIELDS.PRIORITYLOAD});
-                var strCarrier = results.getText({name: objTransferOrder.FIELDS.CARRIER});
-                var strDescription = results.getValue ({name: objTransferOrder.SUBLISTS.FIELDS.SALESDESCRIPTION,
-                	join: objTransferOrder.SUBLISTS.ID});
-                var strConfirmation = results.getValue ({name: objTransferOrder.SUBLISTS.FIELDS.CONFIRMATION});
-                
-                var shipmentFile = generatePackingList({intTOID: intId, genPR: genPR});
-                log.debug ('Shipment File', shipmentFile)
-                var strEdit = '<a href='+strSuiteletId + '&action=edit&toid=' + intId + '&empid=' + intEmpId +'>Edit</a>'
-                var strPrint = '<a href = '+shipmentFile.url+"'"+ ' target="_blank">' + 'Print </a>'
-                
-                log.debug (LOG_NAME, 'strEdit: ' + strEdit);
-                log.debug (LOG_NAME, 'strPrint: ' + strPrint);
-                
-				objValues [intId] = {
-						'item' : intItem,
-						'quantity': intQty,
-						'tolocation': strLocation,
-						'docnumber': strDocId,
-						'pickup': dtPickup,
-						'delivery': dtDelivery,
-						'status': strStatus,
-						'memo': strMemo,
-						'load': intLoad,
-						'carrier': strCarrier,
-						'priorityload': intPriority,
-						'description': strDescription,
-						'edit': strEdit,
-						'print': strPrint,
-						'link': shipmentFile.id,
-						'confirmation' : strConfirmation
-					}  
-                return true;
-            });
-            
-            log.debug (LOG_NAME, objValues);
-            
-            var arrKeysValues = Object.keys(objValues);
-            log.debug (LOG_NAME, 'arrKeysValues: ' + arrKeysValues);
 
-            if(arrKeysValues.length < 0) return;
+			if(!isEmpty(objFilterVal.FromLocation)){
+				arrFilters.push(search.createFilter({
+					name: objTransferOrder.FIELDS.LOCATION,
+					operator: search.Operator.ANYOF,
+					values:  objFilterVal.FromLocation }));
+			}
+			if(!isEmpty(objFilterVal.ToLocation)){
+				arrFilters.push(search.createFilter({
+					name: objTransferOrder.FIELDS.TOLOCATION,
+					operator: search.Operator.ANYOF,
+					values:  objFilterVal.ToLocation }));
+			}
+			if(!isEmpty(objFilterVal.PriorityLoad)){
+				arrFilters.push(search.createFilter({
+					name: objTransferOrder.FIELDS.PRIORITYLOAD,
+					operator: search.Operator.ANYOF,
+					values:  objFilterVal.PriorityLoad }));
+			}
+			if(!isEmpty(objFilterVal.Status)){
+				arrFilters.push(search.createFilter({
+					name: objTransferOrder.FIELDS.STATUS,
+					operator: search.Operator.ANYOF,
+					values:  objFilterVal.Status }));
+			}
+			if(!isEmpty(objFilterVal.Status)){
+				arrFilters.push(search.createFilter({
+					name: objTransferOrder.FIELDS.STATUS,
+					operator: search.Operator.ANYOF,
+					values:  objFilterVal.Status }));
+			}
+			if(!isEmpty(objFilterVal.TransferOrderID)){
+				arrFilters.push(search.createFilter({
+					name: objTransferOrder.FIELDS.ORDERNUM,
+					operator: search.Operator.HASKEYWORDS,
+					values:  objFilterVal.TransferOrderID }));
+			}
+			log.debug('objFilters2.LoadID', objFilterVal.LoadID);
+			if(!isEmpty(objFilterVal.LoadID)){
+				arrFilters.push(search.createFilter({
+					name: objTransferOrder.FIELDS.LOADID,
+					operator: search.Operator.CONTAINS,
+					values:  objFilterVal.LoadID }));
+			}
+				 
+			log.debug("ssTransactionSearch.filters", ssTransactionSearch.filters);
+			let objSearchRes = ssTransactionSearch.runPaged({
+                pageSize: 10
+            });
+		 	var searchCount = objSearchRes.count;
+			log.debug('searchCount', searchCount)
+			var i = 0;
+			objScript = runtime.getCurrentScript();
+			if (searchCount > 0){
+				 
+				var numPages = Math.ceil(searchCount/10);
+				currentPage = currentPage >= numPages ? 0 : currentPage;
+				for (var i=0; i<numPages; i++) {
+					
+					if (i == currentPage) {
+						objPageField.addSelectOption({
+							value : i,
+							text : i+1,
+							isSelected : true
+						});
+					} else {
+						objPageField.addSelectOption({
+							value : i,
+							text : i+1
+						});
+					}
+				}
 
-            arrKeysValues.forEach(function (id, index) {
-                
-             sublistItem.setSublistValue({
-                 id          : objFields.EditLink.ID,
-                 line		 : index,
-                 value		 : objValues[id].edit
-             });
-             
-             sublistItem.setSublistValue({
-                 id          : objFields.PrintLink.ID,
-                 line		 : index,
-                 value		 : objValues[id].print
-             });
-             
-             sublistItem.setSublistValue({
-                 id          : objFields.Link.ID,
-                 line		 : index,
-                 value		 : objValues[id].link
-             });
-            
-             if (!isEmpty(objValues[id].item)){
-           	 sublistItem.setSublistValue({
-                 id          : objFields.Item.ID,
-                 line		 : index,
-                 value		 : objValues[id].item
-             });}
-           	
-           if (!isEmpty(objValues[id].quantity)){
-           	sublistItem.setSublistValue({
-                id         	 : objFields.Quantity.ID,
-                line		 : index,
-                value		 : objValues[id].quantity
-            });}
-           	
-           	if (!isEmpty(objValues[id].description)){
-           	sublistItem.setSublistValue({
-                id           : objFields.Description.ID,
-                line		 : index,
-                value		 : objValues[id].description
-            });}
-       	 
-           	if (!isEmpty(objValues[id].tolocation)){
-            sublistItem.setSublistValue({
-                id           : objFields.Location.ID,
-                line		 : index,
-                value		 : objValues[id].tolocation
-            });}
-       	 
-           	if (!isEmpty(objValues[id].docnumber)){
-            sublistItem.setSublistValue({
-                id           : objFields.DocNumber.ID,
-                line		 : index,
-                value		 : objValues[id].docnumber
-            });}
-       	 
-            if (!isEmpty(objValues[id].pickup)){
-       	 	sublistItem.setSublistValue({
-                id           : objFields.PickUp.ID,
-                line		 : index,
-                value		 : objValues[id].pickup
-            });
-            }
-       	 
-            if (!isEmpty(objValues[id].delivery)){
-       	 	sublistItem.setSublistValue({
-                id           : objFields.Delivery.ID,
-                line		 : index,
-                value		 : objValues[id].delivery
-            });}
-       	 
-            if (!isEmpty(objValues[id].status)){
-       	 	sublistItem.setSublistValue({
-                id          : objFields.Status.ID,
-                line		 : index,
-                value		 : objValues[id].status
-            });}
-       	 
-            if (!isEmpty(objValues[id].load)){
-       	 	sublistItem.setSublistValue({
-                id           : objFields.LoadID.ID,
-                line		 : index,
-                value		 : objValues[id].load
-            });
-            }
-       	 
-            if (!isEmpty(objValues[id].memo)){
-       	 	sublistItem.setSublistValue({
-                id          : objFields.Notes.ID,
-                line		 : index,
-                value		 : objValues[id].memo
-            });
-            }
-       	 
-            if (!isEmpty(objValues[id].priorityload)){
-       	 	sublistItem.setSublistValue({
-                id         	 : objFields.PriorityLoad.ID,
-                line		 : index,
-                value		 : objValues[id].priorityload
-            });
-            }
-       	 
-            if (!isEmpty(objValues[id].carrier)){
-       	 	sublistItem.setSublistValue({
-                id          : objFields.Carrier.ID,
-                line		 : index,
-                value		 : objValues[id].carrier
-            });
-            }
-            
-            if (!isEmpty(objValues[id].confirmation)){
-           	 	sublistItem.setSublistValue({
-                    id         	 : objFields.Confirmation.ID,
-                    line		 : index,
-                    value		 : objValues[id].confirmation
+				
+				let page = objSearchRes.fetch({
+                    index: currentPage
                 });
-                }
-           	
-            });
-    	
+				page.data.forEach(function (results){
+				// ssTransactionSearch.run().each(function (results){
+					
+					var intId = results.getText({name: objTransferOrder.FIELDS.ID, summary: 'GROUP'});
+					var intItem = results.getValue({name: objTransferOrder.SUBLISTS.FIELDS.SHORT_CODE, join: 'item', summary: 'MAX'});
+					var intQty = results.getValue({name: objTransferOrder.SUBLISTS.FIELDS.QTY, summary: 'MAX'});
+					var strFromLocation = results.getValue(results.columns[14]);
+					var strLocation = results.getText({name: objTransferOrder.FIELDS.TOLOCATION, summary: 'GROUP'});
+					var strDocId = results.getValue({name: objTransferOrder.FIELDS.ORDERNUM, summary: 'GROUP'});
+					var dtPickup = results.getValue({name: objTransferOrder.FIELDS.PICKUPDATE, summary: 'GROUP'});
+					var dtDelivery = results.getValue({name: objTransferOrder.FIELDS.DELIVERYDATE, summary: 'GROUP'});
+					var strStatus = results.getText({name: objTransferOrder.FIELDS.STATUS, summary: 'GROUP'});
+					var strMemo = results.getValue({name: objTransferOrder.FIELDS.MEMO, summary: 'GROUP'});
+					var intLoad = results.getValue({name: objTransferOrder.FIELDS.LOADID, summary: 'GROUP'});
+					var intPriority = results.getText({name: objTransferOrder.FIELDS.PRIORITYLOAD, summary: 'GROUP'});
+					var strCarrier = results.getText({name: objTransferOrder.FIELDS.CARRIER, summary: 'GROUP'});
+					var strDescription = results.getValue ({name: objTransferOrder.SUBLISTS.FIELDS.SALESDESCRIPTION,
+						join: objTransferOrder.SUBLISTS.ID, summary: 'GROUP'});
+					var strConfirmation = results.getValue ({name: objTransferOrder.SUBLISTS.FIELDS.CONFIRMATION, summary: 'GROUP'});
+					var intLineId = results.getValue({name: objTransferOrder.SUBLISTS.FIELDS.LINE, summary: 'MAX'});
+					
+					log.debug('intId', intId)
+					log.debug('intLineId', intLineId);
+
+					if(!objValues[intId]){
+						objValues[intId] = {};
+					}
+					objValues[intId][intLineId]={
+						
+							'item' : intItem,
+							'quantity': intQty,
+							'fromLocation': strFromLocation,
+							'tolocation': strLocation,
+							'docnumber': strDocId,
+							'pickup': dtPickup,
+							'delivery': dtDelivery,
+							'status': strStatus,
+							'memo': strMemo,
+							'load': intLoad,
+							'carrier': strCarrier,
+							'priorityload': intPriority,
+							'description': strDescription,
+							'confirmation' : strConfirmation
+						
+					}
+					
+					return true;
+				});
+				
+				Object.keys(objValues).forEach((intId)=>{
+					var shipmentFile = generatePackingList({intTOID: intId, genPR: genPR});
+					// log.debug ('Shipment File', shipmentFile)
+					var strEdit = '<a href='+strSuiteletId + '&action=edit&toid=' + intId + '&empid=' + intEmpId +'>Edit</a>'
+					var strPrint = '<a href = '+shipmentFile.url+"'"+ ' target="_blank">' + 'Print </a>'
+					
+					// log.debug (LOG_NAME, 'strEdit: ' + strEdit);
+					// log.debug (LOG_NAME, 'strPrint: ' + strPrint);
+					objValues[intId]['edit'] = strEdit;
+					objValues[intId]['print'] = strPrint;
+					objValues[intId]['link'] = shipmentFile.id;
+					
+				});
+
+				log.debug (LOG_NAME + 'objValues', objValues);
+				let index = 0;
+				Object.keys(objValues).forEach(function (id) {
+					log.audit('Governance: ' + objScript.getRemainingUsage(), id);
+					var arrKeysValues = Object.keys(objValues[id]);
+					//log.debug (LOG_NAME, 'arrKeysValues: ' + arrKeysValues);
+					
+					var objTORec = objValues[id];
+					log.debug('objTORec: ' + id , objTORec);
+					// log.debug('arrKeysValues', arrKeysValues);
+					if(arrKeysValues.length < 0) return;
+					
+
+					arrKeysValues.forEach(function (lineId){
+						log.debug('lineId', lineId)
+						if(lineId == 'edit' || lineId == 'print' || lineId == 'link') return;
+						sublistItem.setSublistValue({
+							id          : objFields.EditLink.ID,
+							line		 : index,
+							value		 :objTORec.edit
+						});
+						
+						sublistItem.setSublistValue({
+							id          : objFields.PrintLink.ID,
+							line		 : index,
+							value		 : objTORec.print
+						});
+						
+						sublistItem.setSublistValue({
+							id          : objFields.Link.ID,
+							line		 : index,
+							value		 : objTORec.link
+						});
+					
+						if (!isEmpty(objTORec[lineId].item)){
+						sublistItem.setSublistValue({
+							id          : objFields.Item.ID,
+							line		 : index,
+							value		 : objTORec[lineId].item
+						});}
+						
+					if (!isEmpty(objTORec[lineId].quantity)){
+						sublistItem.setSublistValue({
+						id         	 : objFields.Quantity.ID,
+						line		 : index,
+						value		 : objTORec[lineId].quantity
+					});}
+						
+						if (!isEmpty(objTORec[lineId].description)){
+						sublistItem.setSublistValue({
+						id           : objFields.Description.ID,
+						line		 : index,
+						value		 : objTORec[lineId].description
+					});}
+					
+					if (!isEmpty(objTORec[lineId].fromLocation)){
+					sublistItem.setSublistValue({
+						id           : objFields.FromLocation.ID,
+						line		 : index,
+						value		 : objTORec[lineId].fromLocation
+					});}
+		
+						if (!isEmpty(objTORec[lineId].tolocation)){
+					sublistItem.setSublistValue({
+						id           : objFields.Location.ID,
+						line		 : index,
+						value		 : objTORec[lineId].tolocation
+					});}
+					
+						if (!isEmpty(objTORec[lineId].docnumber)){
+					sublistItem.setSublistValue({
+						id           : objFields.DocNumber.ID,
+						line		 : index,
+						value		 : objTORec[lineId].docnumber
+					});}
+					
+					if (!isEmpty(objTORec[lineId].pickup)){
+						sublistItem.setSublistValue({
+						id           : objFields.PickUp.ID,
+						line		 : index,
+						value		 : objTORec[lineId].pickup
+					});
+					}
+					
+					if (!isEmpty(objTORec[lineId].delivery)){
+						sublistItem.setSublistValue({
+						id           : objFields.Delivery.ID,
+						line		 : index,
+						value		 : objTORec[lineId].delivery
+					});}
+					
+					if (!isEmpty(objTORec[lineId].status)){
+						sublistItem.setSublistValue({
+						id          : objFields.Status.ID,
+						line		 : index,
+						value		 : objTORec[lineId].status
+					});}
+					
+					if (!isEmpty(objTORec[lineId].load)){
+						sublistItem.setSublistValue({
+						id           : objFields.LoadID.ID,
+						line		 : index,
+						value		 : objTORec[lineId].load
+					});
+					}
+					
+					if (!isEmpty(objTORec[lineId].memo)){
+						sublistItem.setSublistValue({
+						id          : objFields.Notes.ID,
+						line		 : index,
+						value		 : objTORec[lineId].memo
+					});
+					}
+					
+					if (!isEmpty(objTORec[lineId].priorityload)){
+						sublistItem.setSublistValue({
+						id         	 : objFields.PriorityLoad.ID,
+						line		 : index,
+						value		 : objTORec[lineId].priorityload
+					});
+					}
+					
+					if (!isEmpty(objTORec[lineId].carrier)){
+						sublistItem.setSublistValue({
+						id          : objFields.Carrier.ID,
+						line		 : index,
+						value		 : objTORec[lineId].carrier
+					});
+					}
+					
+					if (!isEmpty(objTORec[lineId].confirmation)){
+							sublistItem.setSublistValue({
+							id         	 : objFields.Confirmation.ID,
+							line		 : index,
+							value		 : objTORec[lineId].confirmation
+						});
+						}
+						index++;
+						})
+				
+					
+				});
+			}	
+		} catch (error) {
+			log.error("Error Message", error.message);
+		}
     }
     
     function getEmployeeRecord(options){

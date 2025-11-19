@@ -110,7 +110,12 @@ define(['N/log', 'N/runtime', 'N/file', 'N/record', 'N/email', 'N/search', 'N/ui
 				operator: search.Operator.ANYOF,
 				values: [intPurchaseOrderId]
 			});
-			var arrFilters = [objApplyingTransactionTypeFilter,objAppliedToTransactionTypeFilter,objStatusFilter,objInternalIDFilter,objQuantityFormulaFilter];
+			var objCustomFormFilter = search.createFilter({
+				name: 'customform',
+				operator: search.Operator.NONEOF,
+				values: ['-9896','208']//-9896 - Standard Outsourced Purchase Order, 208 - Olipop Outsourced Purchase Order
+			});
+			var arrFilters = [objApplyingTransactionTypeFilter,objAppliedToTransactionTypeFilter,objStatusFilter,objInternalIDFilter,objQuantityFormulaFilter,objCustomFormFilter];
 			
 			var objApplyingTransactionColumn = search.createColumn({
 				name: 'applyingtransaction'
@@ -211,7 +216,7 @@ define(['N/log', 'N/runtime', 'N/file', 'N/record', 'N/email', 'N/search', 'N/ui
 			
 			log.debug('intPurchaseOrderId',intPurchaseOrderId);
 			
-			var objRelatedItemReceiptQuery = "SELECT prevLink.previousdoc, prevLink.previousline, prevLink.nextdoc, prevLink.nextline FROM previoustransactionlinelink prevLink WHERE prevLink.previousdoc = " + intPurchaseOrderId;
+			var objRelatedItemReceiptQuery = "SELECT prevLink.previousdoc, prevLink.previousline, prevLink.nextdoc, prevLink.nextline, prevLink.nexttype FROM previoustransactionlinelink prevLink WHERE prevLink.previousdoc = " + intPurchaseOrderId + " AND prevLink.nexttype = 'ItemRcpt'";
 			
 			var arrItemReceiptItemRateQueryResults = query.runSuiteQL({
 				query: objRelatedItemReceiptQuery

@@ -14,10 +14,14 @@ var dependencies = ['N/search'];
 define(dependencies,function(search){
 	var SCRIPT_PARAMETERS = {
 			HTML_FILE_ID: 'custscript_cwgp_opop_html_fileid',
-			CLIENTSCRIPT: '',
+			CLIENTSCRIPT: 'custscript_cwgp_clientscriptpath',
 			ACTION: 'custscript_cwgp_action',
 			DEFAULT_TEMPLATE: '116',
-			DEFAULT_FOLDER: '16842' //PDF Files folder
+			//PDF Files folder
+			DEFAULT_FOLDER: '86892',
+			// 86892 PROD
+			// 16842 SB
+						  
 		};
 	
 	var SAVED_SEARCH = {
@@ -49,8 +53,8 @@ define(dependencies,function(search){
 				DELIVERYDATE: 'custbody_olipop_exp_delivery_date',
 				FIRMED: 'firmed',
 				USEITEMCOST: 'istransferpricecosting',
-				CREATEDDATE: 'custbody_esc_created_date',
-				LASTMODIFIED: 'custbody_esc_last_modified_date',
+				CREATEDDATE: 'custbody_esc_created_date',//
+				LASTMODIFIED: 'custbody_esc_last_modified_date', //
 				POCOUNT: 'custbody_olipop_customer_po_num',
 				ORDERCOUNT: 'custbody_olipop_to_casecount_number',
 				MFG: 'custbody_olipop_mfg_po',
@@ -71,6 +75,8 @@ define(dependencies,function(search){
 			SUBLISTS: {
 				ID: 'item',
 				FIELDS: {
+					LINE : 'line',
+					SHORT_CODE: 'custitemcustom_short_code',
 					SALESDESCRIPTION: 'salesdescription',
 					ITEM: 'item',
 					SHOPIFY: 'custcol_custitem_fa_shopify_sku',
@@ -91,14 +97,12 @@ define(dependencies,function(search){
 	}
 	
 	var FORM_ELEMENTS = {
-
 			HtmlField: {
 				ID: 'custpage_cwgp_opop_fld_html',
 				TYPE: 'INLINEHTML',
 				LABEL: 'HTML Field',
 				CONTAINER : 'Message'
 			},
-
 			HtmlCssField: {
 				ID: 'custpage_cwgp_opop_fld_landinghtml',
 				TYPE: 'INLINEHTML',
@@ -111,9 +115,11 @@ define(dependencies,function(search){
 				LABEL: 'Header',
 				CONTAINER : 'HeaderLogo'
 			},
-
 			SubmitButtonTop: {
 				ID: 'custpage_cwgp_opop_btntop'
+			},
+			FilterButton: {
+				ID: 'custpage_cwgp_opop_fltrbtntop'
 			},
 			BackButton: {
 				ID: 'custpage_cwgp_opop_btnback'
@@ -153,6 +159,52 @@ define(dependencies,function(search){
 				Main: {
 					ID: 'custpage_cwgp_opop_transferorder_grp',
 					LABEL: 'Transfer Order ID',
+				},
+				Filters: {
+					ID: 'custpage_cwgp_opop_filter_grp',
+					LABEL: 'Filters',
+				}
+			},
+			FILTERS: {
+				FromLocation : {
+					LABEL	:	'From Location',
+					ID		:	'custpage_cwgp_opop_frlocation',
+					TYPE	:	'MULTISELECT', //From Location
+					SOURCE	:	'location'
+				},
+				ToLocation : {
+					LABEL	:	'To Location',
+					ID		:	'custpage_cwgp_opop_tolocation',
+					TYPE	:	'MULTISELECT', //To Location
+					SOURCE	:	'location'
+				},
+				PriorityLoad: {
+					ID: 'custpage_cwgp_opop_priorityload',
+					TYPE: 'SELECT',
+					LABEL: 'Priority Load',
+					SOURCE: 'customlist_cwgp_list_priorityload'
+				},
+				Status: {
+					ID: 'custpage_cwgp_opop_status',
+					TYPE: 'SELECT',
+					LABEL: 'Delivery Status',
+					SOURCE: 'customlist_cwgp_list_deliverystatus'
+				},
+				TransferOrderID: {
+					ID: 'custpage_cwgp_opop_toid',
+					LABEL: 'Transfer Order ID',
+					TYPE: 'TEXT'
+				},
+				LoadID: {
+					ID: 'custpage_cwgp_opop_loadid',
+					TYPE: 'TEXT',
+					LABEL: 'Load ID'
+				},
+				Page: {
+					ID: 'custpage_cwgp_opop_page',
+					TYPE: 'SELECT',
+					LABEL: 'Page',
+					//SOURCE: ''
 				}
 			},
 			SUBLIST : {
@@ -396,6 +448,11 @@ define(dependencies,function(search){
 							ID: 'custpage_cwgp_opop_sfld_t_quantity',
 							TYPE: 'INTEGER',
 							LABEL: 'Qty'
+						},
+						FromLocation: {
+							ID: 'custpage_cwgp_opop_sfld_t_frmlocation',
+							TYPE: 'TEXT',
+							LABEL: 'From Location'
 						},
 						Location: {
 							ID: 'custpage_cwgp_opop_sfld_t_location',

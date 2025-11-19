@@ -18,7 +18,7 @@ define(['N/query', 'N/runtime', 'N/file', 'N/record', 'N/email', 'N/search', 'N/
 
 function(query, runtime, file, record, email, search, widget,format,render) {
 	
-	var intTransactionSearchID = 2351;
+	var intTransactionSearchID = 4832;
    
     /**
      * Marks the beginning of the Map/Reduce process and generates input data.
@@ -45,12 +45,20 @@ function(query, runtime, file, record, email, search, widget,format,render) {
 		
 		var arrTransactionIDs = [];
 		
+		var objTransaction = {};
+		
 		var objPagedData = objTransactionSearch.runPaged();
 		objPagedData.pageRanges.forEach(function(pageRange){
 			var objPage = objPagedData.fetch({index: pageRange.index});
 			objPage.data.forEach(function(result){
-				
-				arrTransactionIDs.push(result.id);
+				objTransaction = {};
+				objTransaction.type = result.recordType;
+				objTransaction.name = result.getValue('entity');
+				objTransaction.id = result.id;
+				objTransaction.count = objPagedData.count;
+				arrTransactionIDs.push(objTransaction);
+
+				log.debug("objTransaction",JSON.stringify(objTransaction))
 				
 			});//objPage.data.forEach(function(result) end
 		});//objPagedData.pageRanges.forEach(function(pageRange) end
@@ -67,15 +75,12 @@ function(query, runtime, file, record, email, search, widget,format,render) {
      * @since 2015.1
      */
     function map(context) {
-		var stTransactionID = JSON.parse(context.value);
-		//log.debug('stTransactionID',stTransactionID);
-		
-		var intTransactionID = parseInt(stTransactionID);
-		var intRemainder = intTransactionID % 2;
-		
+		var objTransaction = JSON.parse(context.value);
+
 		context.write({
-			key: String(intRemainder),
-			value: stTransactionID
+			//key: String(intRemainder),
+			key: objTransaction.name,
+			value: objTransaction
 		});
     }//map end
 	
@@ -88,13 +93,14 @@ function(query, runtime, file, record, email, search, widget,format,render) {
     function reduce(context) {
 		
 		var arrSearchValues = context.values;
+		log.debug("arrSearchValues context", arrSearchValues);
 		log.debug('arrSearchValues',arrSearchValues);
 		
 		var arrUpdatedTransactions = [];
 		
-		arrSearchValues.forEach(function(transactionid){
-			var stTransactionID = JSON.parse(transactionid);
-			var objTransaction = record.load(stTransactionID);
+		arrSearchValues.forEach(function(transaction){
+			var objTransactionInfo = JSON.parse(transaction);
+			var objTransaction = record.load(objTransactionInfo);
 			var intTransactionID = objTransaction.save();
 			arrUpdatedTransactions.push(intTransactionID);
 		});

@@ -16,7 +16,9 @@
 
 var __CONFIG = {
 		FILEID: 'custscript_cwgp_fileid',
-		PDF_DIRECTORY : '16842' //cwgp > pdf files
+		//cwgp > pdf files
+		PDF_DIRECTORY : '86892', //PROD 
+					  //'16842', //SB
 }
 
 var FIELDS = {

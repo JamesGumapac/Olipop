@@ -4,6 +4,7 @@
  *
  * Date         Modified By            Notes
  * 2022-01-10   Marc Aliswag           Initial File Creation
+ * 2023-07-04   Carl Sy                Added condition to check if ALL line level location of Sales Order is null
  
  * @NApiVersion 2.1
  * @NScriptType MapReduceScript
@@ -17,11 +18,11 @@ function(search, record, runtime) {
 
     const _CONFIG = {
         SEARCHID: 'customsearch_cwgp_script_backorderloc',
-        //ITEMS: [5159, 5158, 5160, 5164, 5174, 5205]
-        ITEMS : [2952, 2950, 2954, 2960, 2968, 3475],
+        ITEMS: [5159, 5158, 5160, 5164, 5174, 5205],
+        //ITEMS : [2952, 2950, 2954, 2960, 2968, 3475],
         SEARCHES :{
-            WITHLOCATION : 2385,
-            WITHOUTLOCATION : 2338
+            WITHLOCATION : 2390,
+            WITHOUTLOCATION : 2391
         }
     }
 
@@ -89,7 +90,9 @@ function(search, record, runtime) {
             });
             //log.debug("intLocation",intLocation);
             //Begin : Adding of function to find nearest location the item is available based on the selected ALA Config Rule
+            log.debug("intLocation 1", intLocation);
             if(isEmpty(intLocation)){
+                log.debug("searchId", searchId);
                 if(searchId == _CONFIG.SEARCHES.WITHLOCATION){
                     intLocation = fnSearchIfRecordHasLocation(intId);
                 }
@@ -121,8 +124,8 @@ function(search, record, runtime) {
 
         ssLocationSearch.run().each(function (result) {
             log.debug("result", result);
-            let line = parseInt(result.getValue({ name: 'linesequencenumber' })) - 1;
-  if(searchid == _CONFIG.SEARCHES.WITHOUTLOCATION){
+          // Added condition to check if ALL line level location of Sales Order is null
+            if(searchid == _CONFIG.SEARCHES.WITHOUTLOCATION){
                 let objSalesOrder = record.load({
                     type: record.Type.SALES_ORDER,
                     id: result.id,
@@ -135,18 +138,20 @@ function(search, record, runtime) {
                 
                 log.debug('itemSLCount', itemSLCount);
     
-                for(var i = 0; i < itemSLCount; i++){ //Check all location line items
+                for(var i = 0; i < itemSLCount; i++){ //Check all lines for location
                     let itemLocation = objSalesOrder.getSublistValue({
                         sublistId: 'item',
                         fieldId: 'location',
                         line: i
                     });
                     if (itemLocation){
-                        log.debug('searchOrders() line 145', 'Sales Order has line item location')
+                        log.debug('searchOrders_checkIfHasLocation', 'Sales Order has line item location');
                         return true;
                     }
                 }
             }
+            let line = parseInt(result.getValue({ name: 'linesequencenumber' })) - 1;
+
             if(objHolder[result.id]) {
                 objHolder[result.id][line] = {
                     'location': result.getValue({ name: 'location' }) || null,
@@ -237,6 +242,7 @@ function(search, record, runtime) {
 
 
     function fnALAReassignToLocation(soID){
+        log.debug("fnALAReassignToLocation",fnALAReassignToLocation);
         let objSoRecord = record.load({
             type: record.Type.SALES_ORDER,
             id: soID

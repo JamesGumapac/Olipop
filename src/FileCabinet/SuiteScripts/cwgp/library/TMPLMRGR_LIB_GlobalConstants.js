@@ -53,6 +53,22 @@ define(dependencies,function(runtime,format,search,record){
 
 			}
 
+          	//DELIMITER DEFINITION
+			_self.DELIMITER = {};
+
+          //DELIMITER HEADER
+          	_self.DELIMITER.HEADER = {
+              CSV: ',',
+              DOCNUMBER: 'Document Number',
+              DATE: 'Date',
+              LINEID: 'Line ID',
+              ITEM: 'Item',
+              SKU: 'SKU',
+              QUANTITY: 'Quantity',
+              UNITS: 'Unit',
+              ITEMSEARCH: 'customsearch_cwgp_listofitems'
+			}
+
 			//CUSTOMRECORD DEFINITION
 			_self.CUSTOMRECORDS = {};
 
@@ -64,8 +80,22 @@ define(dependencies,function(runtime,format,search,record){
 					FILENAME 		: 'custrecord_cwgp_tmplheader_filename',
 					TYPE			: 'custrecord_cwgp_tmplheader_type',
 					FOLDER			: 'custrecord_cwgp_tmplheader_folder',
+                    INFOLDER        :  'custrecord_cwgp_tmplheader_infolder',
 					AFTEREXPORT		: 'custrecord_cwgp_tmplheader_afterexport',
 					FILETYPE		: 'custrecord_cwgp_tmplheader_ftype',
+                  CONFIG : 'custrecord_cwgp_tmplheader_config'
+				},
+				SUBLISTS : {
+
+				}
+			}
+
+          			//STAGING RECORD
+			_self.CUSTOMRECORDS.STAGINGRECORD = {
+				ID : 'customrecord_cwgp_3pl_stagingrecord',
+				FIELDS : {
+					FILE			: 'custrecord_cwgp_3pl_stagefile',
+					TEMPLATE 		: 'custrecord_cwgp_3pl_template',
 				},
 				SUBLISTS : {
 
