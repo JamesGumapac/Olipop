@@ -11,13 +11,17 @@ define([
   "N/url",
   "N/https",
 ], (serverWidget, search, record, log, url, https) => {
-  const COMPONENT_SUBLIST_ID = "component";
-
   /**
-   * Extract Component Item IDs from the BOM Revision.
-   * Source priority:
-   * 1) custrecord_mfgmob_mm_auto_issue_list
-   * 2) component sublist inside BOM Revision
+   * Retrieves a list of unique component item IDs associated with a Bill of Materials (BOM) revision
+   * from the provided record.
+   *
+   * This function processes both a custom field (`custrecord_mfgmob_mm_auto_issue_list`)
+   * and the component sublist within the BOM revision record to collect all relevant component item IDs.
+   *
+   * @param {Object} newRecord - The record object containing the BOM revision details.
+   *                             Expected to have a field `billofmaterialsrevision` storing the BOM revision ID.
+   * @returns {string[]} An array of unique component item IDs. Returns an empty array if no BOM revision ID
+   *                     is found or if an error occurs during processing.
    */
   const getComponentItemIdsFromBomRevision = (newRecord) => {
     const ids = new Set();
@@ -57,7 +61,19 @@ define([
     return Array.from(ids);
   };
 
-  /** Build map itemId --> label */
+  /**
+   * Creates a map of item labels based on a list of item internal IDs.
+   *
+   * This function generates a mapping between item internal IDs and their corresponding
+   * label, which consists of the item ID and optionally a display name or sales description.
+   * If the display name or sales description is available, it is appended to the item ID
+   * in the format "itemid : display". If neither is available, only the item ID is used.
+   *
+   * @param {Array<string|number>} itemIds - An array of internal IDs of items to be processed.
+   *                                         If the array is empty or null, an empty map is returned.
+   * @returns {Map<string, string>} A map where the keys are item internal IDs (as strings),
+   *                                and the values are the corresponding label strings.
+   */
   const buildItemLabelMap = (itemIds) => {
     const map = new Map();
     if (!itemIds || !itemIds.length) return map;
@@ -84,7 +100,13 @@ define([
     return map;
   };
 
-  /** Build Component Lots Sublist */
+  /**
+   * Builds and configures the "Component Lots" sublist for a given form. The sublist is added to a specific tab and contains fields for managing component-related lot information.
+   *
+   * @param {Object} params - The parameter object for configuring the sublist.
+   * @param {Object} params.form - The form object where the sublist will be added.
+   * @param {Map<string, string>} params.itemLabelMap - A map of item IDs to their labels, used for populating the "Component Item" field options.
+   */
   const buildComponentLotsSublist = ({ form, itemLabelMap }) => {
     const tabId = "custom1810";
 
@@ -132,11 +154,69 @@ define([
       source: "location",
     });
   };
+  /**
+   * Injects an INLINEHTML field that hides one or more elements
+   * on the client using jQuery + require().
+   *
+   * @param {Object} options
+   * @param {ServerWidgetForm} options.form - Suitelet/UE form
+   * @param {string|string[]} options.selectors - CSS selector or array of selectors
+   * @param {string} [options.fieldId='custpage_hide_element'] - internal id of inline html field
+   */
+  const injectHideScript = ({
+    form,
+    selectors,
+    fieldId = "custpage_hide_element",
+  }) => {
+    const functionName = "injectHideScript";
 
-  /** beforeLoad */
+    try {
+      const selArray = Array.isArray(selectors) ? selectors : [selectors];
+
+      const jsCommands = selArray
+        .filter(Boolean)
+        .map((sel) => `jQuery("${sel}").hide();`)
+        .join("");
+
+      if (!jsCommands) return;
+
+      const inlineFld = form.addField({
+        id: fieldId,
+        label: "not shown - hidden",
+        type: serverWidget.FieldType.INLINEHTML,
+      });
+
+      inlineFld.defaultValue = `<script>
+        jQuery(function($){
+          require([], function(){
+            ${jsCommands}
+          });
+        });
+      </script>`;
+    } catch (e) {
+      log.error(functionName, { message: e.message, stack: e.stack });
+    }
+  };
+  /**
+   * Defines the `beforeLoad` user event handler for certain record types and performs specific actions based on the event type.
+   *
+   * The function modifies the record's form, dynamically builds sublists, and assigns a client script when certain conditions are met.
+   *
+   * @param {Object} ctx - The context object passed into the `beforeLoad` event.
+   * @param {Object} ctx.form - Represents the current form in the user event.
+   * @param {Object} ctx.newRecord - Represents the record object involved in the current event.
+   * @param {string} ctx.type - The context for the user event (e.g., create, edit, delete).
+   *
+   * @throws Will log an error if removing a sublist fails.
+   */
   const beforeLoad = (ctx) => {
     const { form, newRecord, type } = ctx;
-
+    if (type == "create") {
+      injectHideScript({
+        form,
+        selectors: "#recmachcustrecord_cwgp_lottrace_sourcetxlnk",
+      });
+    }
     if (type === ctx.UserEventType.DELETE) return;
     if (newRecord.type !== record.Type.ASSEMBLY_BUILD) return;
 
@@ -167,7 +247,7 @@ define([
 
     try {
       // CREATE ONLY
-      if(type !== "create") return
+      if (type !== "create") return;
       if (newRecord.type !== record.Type.ASSEMBLY_BUILD) return;
 
       log.audit(functionName, "START");
@@ -207,10 +287,6 @@ define([
         body: objParams,
         method: https.Method.POST,
       });
-
-      log.audit(functionName, { objResponse });
-
-      // Call suitelet (fire & log response)
 
       log.audit(functionName, {
         responseCode: objResponse.code,

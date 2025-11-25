@@ -38,8 +38,6 @@ define(["N/search", "N/log", "N/record"] /**
   const LOT_F_LOCATION = "custpage_location";
   const LOT_F_QUANTITY = "custpage_quantity";
 
-  const FINISH_GOOD_TYPE_ID = "17";
-  const COMPONENT_LOTS_TAB_ID = "custpage_component_lot_sublist";
 
   /**
    * Clears all options from a select field and inserts a default empty option.
@@ -115,7 +113,7 @@ define(["N/search", "N/log", "N/record"] /**
         filters: [
           ["internalid", "anyof", Array.from(itemIds)],
           "AND",
-          ["custitem_atlas_product_group", "anyof", FINISH_GOOD_TYPE_ID],
+          ["custitem_cwgp_enablelottraceability", "is", "T"],
         ],
         columns: ["itemid", "displayname", "salesdescription"],
       });
@@ -125,7 +123,7 @@ define(["N/search", "N/log", "N/record"] /**
         const code = r.getValue("itemid");
         const disp =
           r.getValue("displayname") || r.getValue("salesdescription") || "";
-        map[id] = disp ? `${code} : ${disp}` : code;
+        map[id] = disp ? `${code}  ` : `${disp}`;
         return true;
       });
 
@@ -136,7 +134,7 @@ define(["N/search", "N/log", "N/record"] /**
     }
   };
 
-  const LOADING_ID = "rxrs-mini-loader";
+  const LOADING_ID = "cwgp-mini-loader";
 
   /**
    * Displays a mini loading overlay with a spinner and optional text message.
@@ -335,7 +333,7 @@ define(["N/search", "N/log", "N/record"] /**
                       ignoreFieldChange: false, // allow sourcing
                     });
 
-                    // ✅ confirm item really got set
+                    //  confirm item really got set
                     const itemVal = currentRecord.getCurrentSublistValue({
                       sublistId: SUBLIST_ID,
                       fieldId: ITEM_FID,
@@ -357,13 +355,15 @@ define(["N/search", "N/log", "N/record"] /**
                   }
                 });
               }, 500);
+              setTimeout(() => {
+                hideMiniLoader();
+              }, 500);
             }
           } catch (e) {
             console.error("BOM load failed", e);
             // optional: alert(e.message)
           } finally {
           }
-          hideMiniLoader();
         }, 100);
       }
 
@@ -392,10 +392,9 @@ define(["N/search", "N/log", "N/record"] /**
         });
 
         if (!itemId) return;
-
         const lotSearch = search.create({
           type: LOT_REC_TYPE,
-          filters: [],
+          filters: ["custrecord_cwgp_lotnumber_item", "anyof", itemId],
           columns: [
             search.createColumn({ name: "internalid" }),
             search.createColumn({ name: LOT_F_NUMBER }),
@@ -464,30 +463,65 @@ define(["N/search", "N/log", "N/record"] /**
     }
   };
   /**
-   * ---------------------------------------------------------------------
+   * Handles the logic to focus and interact with the "Lot Number" and "Component Lots" tabs in the DOM.
    *
-   * @function focusComponentLotsTab
+   * This function attempts to locate and click the "Lot Number" tab using a set of predefined CSS selectors.
+   * If successful, it then proceeds to click the "Component Lots" tab after a short delay.
    *
-   * @description
-   * Forces focus to Component Lots subtab using NetSuite's showmachine()
-   * if available, otherwise falls back to DOM click.
+   * Behavior:
+   * 1. Searches for elements corresponding to the DOM selectors for the "Lot Number" tab.
+   *    - If found, it triggers a click on the first matching element.
+   *    - Logs a message if no matching element is found.
+   * 2. Introduces a slight delay to allow for UI updates.
+   * 3. Searches for elements corresponding to the DOM selectors for the "Component Lots" tab.
+   *    - If found, it triggers a click on the first matching element.
+   *    - Logs a message if no matching element is found.
+   * 4. Handles any errors that occur during execution and logs them.
    *
-   * ---------------------------------------------------------------------
+   * Note:
+   * - The function uses jQuery to locate and trigger DOM elements.
+   * - Timing delays of 150ms and 250ms are implemented to ensure proper UI interaction.
+   * - Logs informative messages for debugging when selectors are not found or in case of errors.
    */
   const focusComponentLotsTab = () => {
-    const functionName = "focusComponentLotsTab";
-
     try {
-      window.setTimeout(() => {
-        const subtabId = "custpage_component_lot_sublist";
-        const tabTxtId = "custpage_component_lot_sublisttxt";
-        const tabLnkId = "custpage_component_lot_sublistlnk";
+      setTimeout(() => {
+        // 1. LOT NUMBER TAB SELECTORS
+        const lotNumberSelectors = ["#custom1810txt", "#custom1810lnk"];
 
-        window.showmachine = "custpage_component_lot_sublist";
-        showmachine("custpage_component_lot_sublist");
-      }, 200);
+        // 2. COMPONENT LOTS TAB SELECTORS
+        const componentSelectors = [
+          "#custpage_component_lot_sublisttxt",
+          "#custpage_component_lot_sublistlnk",
+        ];
+
+        // Click Lot Number tab
+        let lotFocused = false;
+        for (let sel of lotNumberSelectors) {
+          if (jQuery(sel).length) {
+            jQuery(sel).trigger("click");
+            lotFocused = true;
+            break;
+          }
+        }
+
+        if (!lotFocused) {
+          console.log("Lot Number Tab not found in DOM.");
+        }
+
+        // 3. After a delay, click Component Lots tab
+        setTimeout(() => {
+          for (let sel of componentSelectors) {
+            if (jQuery(sel).length) {
+              jQuery(sel).trigger("click");
+              return;
+            }
+          }
+          console.log("Component Lots Tab not found in DOM.");
+        }, 250); // delay after focusing Lot Number
+      }, 150);
     } catch (error) {
-      log.error(functionName, { error: error.message, stack: error.stack });
+      log.error("focusComponentLotsTab", error);
     }
   };
 
@@ -512,7 +546,7 @@ define(["N/search", "N/log", "N/record"] /**
 
       const lineCount =
         currentRecord.getLineCount({ sublistId: SUBLIST_ID }) || 0;
-      alert(lineCount);
+
       if (!lineCount) return true;
 
       const missingLines = [];
@@ -600,18 +634,20 @@ define(["N/search", "N/log", "N/record"] /**
     }
   };
   /**
-   * ---------------------------------------------------------------------
+   * Extracts and returns an array of component lot data from a given record's sublist.
    *
-   * @function getComponentLotsData
+   * @param {Object} currentRecord - The record object from which data is retrieved.
+   * @returns {Array<Object>} Returns an array of component lot objects, each containing:
+   *   - `lotNumber`: The lot number as a string.
+   *   - `item`: The item identifier.
+   *   - `expirationDate`: The expiration date of the lot.
+   *   - `quantity`: The quantity associated with the lot.
+   *   - `location`: The location associated with the record.
+   *   - `status`: Defaults to null (future use for processing statuses).
+   *   - `error`: Defaults to an empty string (used for error tracking if necessary).
    *
-   * @description
-   * Collects all Component Lots sublist lines into an array of objects
-   * compatible with createLotTraceability(options).
-   *
-   * Uses existing CS constants:
-   * SUBLIST_ID, ITEM_FID, LOT_FID, EXP_FID, LOT_F_QUANTITY, LOC_FID
-   *
-   * ---------------------------------------------------------------------
+   * Logs the process progress and errors, if any, during the execution. In case of failure,
+   * an empty array is returned.
    */
   const getComponentLotsData = (currentRecord) => {
     const functionName = "getComponentLotsData";
