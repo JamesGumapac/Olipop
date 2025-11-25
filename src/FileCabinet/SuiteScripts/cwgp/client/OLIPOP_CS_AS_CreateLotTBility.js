@@ -35,7 +35,11 @@ define(["N/search", "N/log", "N/record"] /**
   const LOT_REC_TYPE = "customrecord_cwgp_lotnumber";
   const LOT_F_NUMBER = "custrecord_cwgp_lotnumber_number";
   const LOT_F_EXPDATE = "custrecord_cwgp_lotnumber_expirationdate";
+  const LOT_F_LOCATION = "custpage_location";
+  const LOT_F_QUANTITY = "custpage_quantity";
+
   const FINISH_GOOD_TYPE_ID = "17";
+  const COMPONENT_LOTS_TAB_ID = "custpage_component_lot_sublist";
 
   /**
    * Clears all options from a select field and inserts a default empty option.
@@ -223,6 +227,7 @@ define(["N/search", "N/log", "N/record"] /**
       console.warn("hideMiniLoader failed", e);
     }
   };
+
   function isEmpty(stValue) {
     return (
       stValue === "" ||
@@ -357,9 +362,9 @@ define(["N/search", "N/log", "N/record"] /**
             console.error("BOM load failed", e);
             // optional: alert(e.message)
           } finally {
-            hideMiniLoader();
           }
-        }, 0);
+          hideMiniLoader();
+        }, 100);
       }
 
       /**
@@ -458,6 +463,215 @@ define(["N/search", "N/log", "N/record"] /**
       log.error("fieldChanged", e);
     }
   };
+  /**
+   * ---------------------------------------------------------------------
+   *
+   * @function focusComponentLotsTab
+   *
+   * @description
+   * Forces focus to Component Lots subtab using NetSuite's showmachine()
+   * if available, otherwise falls back to DOM click.
+   *
+   * ---------------------------------------------------------------------
+   */
+  const focusComponentLotsTab = () => {
+    const functionName = "focusComponentLotsTab";
 
-  return { fieldChanged };
+    try {
+      window.setTimeout(() => {
+        const subtabId = "custpage_component_lot_sublist";
+        const tabTxtId = "custpage_component_lot_sublisttxt";
+        const tabLnkId = "custpage_component_lot_sublistlnk";
+
+        window.showmachine = "custpage_component_lot_sublist";
+        showmachine("custpage_component_lot_sublist");
+      }, 200);
+    } catch (error) {
+      log.error(functionName, { error: error.message, stack: error.stack });
+    }
+  };
+
+  /**
+   * ---------------------------------------------------------------------
+   *
+   * @function saveRecord
+   *
+   * @description
+   * Validates Component Lots lines before save.
+   * If missing required fields, auto-focuses the Component Lots tab
+   * and selects the first offending line, then blocks save.
+   *
+   * ---------------------------------------------------------------------
+   */
+  const saveRecord = (scriptContext) => {
+    const functionName = "saveRecord";
+    const { currentRecord } = scriptContext;
+
+    try {
+      log.audit(functionName, "START");
+
+      const lineCount =
+        currentRecord.getLineCount({ sublistId: SUBLIST_ID }) || 0;
+      alert(lineCount);
+      if (!lineCount) return true;
+
+      const missingLines = [];
+      let firstMissingLineIndex = null;
+
+      for (let i = 0; i < lineCount; i++) {
+        const lotNum = currentRecord.getSublistValue({
+          sublistId: SUBLIST_ID,
+          fieldId: LOT_FID,
+          line: i,
+        });
+
+        const expDate = currentRecord.getSublistValue({
+          sublistId: SUBLIST_ID,
+          fieldId: EXP_FID,
+          line: i,
+        });
+
+        const qty = currentRecord.getSublistValue({
+          sublistId: SUBLIST_ID,
+          fieldId: LOT_F_QUANTITY,
+          line: i,
+        });
+
+        const loc = currentRecord.getSublistValue({
+          sublistId: SUBLIST_ID,
+          fieldId: LOT_F_LOCATION,
+          line: i,
+        });
+
+        const isLotMissing =
+          lotNum === null || lotNum === "" || lotNum === undefined;
+        const isExpMissing =
+          expDate === null || expDate === "" || expDate === undefined;
+        const isQtyMissing =
+          qty === null || qty === "" || qty === undefined || Number(qty) <= 0;
+        const isLocMissing = loc === null || loc === "" || loc === undefined;
+
+        if (isLotMissing || isExpMissing || isQtyMissing || isLocMissing) {
+          missingLines.push(i + 1);
+          if (firstMissingLineIndex === null) firstMissingLineIndex = i;
+        }
+      }
+
+      if (missingLines.length) {
+        // 1) jump to tab
+
+        focusComponentLotsTab();
+
+        // 2) after tab switch, select the first bad line to bring it into view
+        window.setTimeout(() => {
+          try {
+            currentRecord.selectLine({
+              sublistId: SUBLIST_ID,
+              line: firstMissingLineIndex,
+            });
+          } catch (e) {
+            log.debug(functionName, "Unable to select offending line.", e);
+          }
+
+          // 3) show alert AFTER focus/selection (alert blocks UI)
+          alert(
+            "Component Lots validation failed.\n\n" +
+              "Please enter LOT NUMBER, EXPIRATION DATE, QUANTITY, and LOCATION " +
+              "for line(s): " +
+              missingLines.join(", "),
+          );
+        }, 300);
+
+        log.audit(functionName, { missingLines });
+        return false;
+      }
+      const componentLots = getComponentLotsData(currentRecord);
+      currentRecord.setValue({
+        fieldId: "custbody_cwgp_componentlots_json",
+        value: JSON.stringify(componentLots),
+      });
+
+      log.audit(functionName, "END");
+      return true;
+    } catch (error) {
+      log.error(functionName, { error: error.message, stack: error.stack });
+      alert("Unexpected error during save validation. Please contact Admin.");
+      return false;
+    }
+  };
+  /**
+   * ---------------------------------------------------------------------
+   *
+   * @function getComponentLotsData
+   *
+   * @description
+   * Collects all Component Lots sublist lines into an array of objects
+   * compatible with createLotTraceability(options).
+   *
+   * Uses existing CS constants:
+   * SUBLIST_ID, ITEM_FID, LOT_FID, EXP_FID, LOT_F_QUANTITY, LOC_FID
+   *
+   * ---------------------------------------------------------------------
+   */
+  const getComponentLotsData = (currentRecord) => {
+    const functionName = "getComponentLotsData";
+    log.audit(functionName, "START");
+
+    try {
+      const lineCount =
+        currentRecord.getLineCount({ sublistId: SUBLIST_ID }) || 0;
+
+      const componentLots = [];
+
+      for (let i = 0; i < lineCount; i++) {
+        const item = currentRecord.getSublistValue({
+          sublistId: SUBLIST_ID,
+          fieldId: ITEM_FID,
+          line: i,
+        });
+
+        const lotNumber = currentRecord.getSublistText({
+          sublistId: SUBLIST_ID,
+          fieldId: LOT_FID,
+          line: i,
+        });
+
+        const expirationDate = currentRecord.getSublistValue({
+          sublistId: SUBLIST_ID,
+          fieldId: EXP_FID,
+          line: i,
+        });
+
+        const quantity = currentRecord.getSublistValue({
+          sublistId: SUBLIST_ID,
+          fieldId: LOT_F_QUANTITY,
+          line: i,
+        });
+
+        // skip truly blank rows
+        if (!item && !lotNumber && !expirationDate && !quantity) {
+          continue;
+        }
+
+        componentLots.push({
+          lotNumber: lotNumber ? String(lotNumber) : "",
+          item: item || "",
+          expirationDate: expirationDate || "",
+          quantity: quantity || "",
+          location: currentRecord.getValue("location") || "",
+          status: null,
+          error: "",
+        });
+      }
+
+      log.audit(functionName, { componentLots, lineCount });
+      log.audit(functionName, "END");
+      return componentLots;
+    } catch (error) {
+      log.error(functionName, { error: error.message, stack: error.stack });
+      return [];
+    }
+  };
+
+  return { fieldChanged, saveRecord };
 });

@@ -3,12 +3,14 @@
  * @NScriptType UserEventScript
  * @description Component Lots sublist on Assembly Build (tab custom1810)
  */
-define(["N/ui/serverWidget", "N/search", "N/record", "N/log"], (
-  serverWidget,
-  search,
-  record,
-  log,
-) => {
+define([
+  "N/ui/serverWidget",
+  "N/search",
+  "N/record",
+  "N/log",
+  "N/url",
+  "N/https",
+], (serverWidget, search, record, log, url, https) => {
   const COMPONENT_SUBLIST_ID = "component";
 
   /**
@@ -121,7 +123,6 @@ define(["N/ui/serverWidget", "N/search", "N/record", "N/log"], (
       id: "custpage_quantity",
       label: "Quantity",
       type: serverWidget.FieldType.FLOAT,
-
     });
 
     sublist.addField({
@@ -147,6 +148,91 @@ define(["N/ui/serverWidget", "N/search", "N/record", "N/log"], (
     form.clientScriptModulePath =
       "SuiteScripts/cwgp/client/OLIPOP_CS_AS_CreateLotTBility.js";
   };
+  /**
+   * ---------------------------------------------------------------------
+   *
+   * @function afterSubmit
+   *
+   * @description
+   * On Assembly Build CREATE only:
+   * - Reads component lots JSON saved by Client Script
+   * - Calls Suitelet to create Lot Traceability records
+   * - Clears JSON field to prevent rerun
+   *
+   * ---------------------------------------------------------------------
+   */
+  const afterSubmit = (scriptContext) => {
+    const functionName = "afterSubmit";
+    const { newRecord, type } = scriptContext;
 
-  return { beforeLoad };
+    try {
+      // CREATE ONLY
+      if(type !== "create") return
+      if (newRecord.type !== record.Type.ASSEMBLY_BUILD) return;
+
+      log.audit(functionName, "START");
+
+      const assemblyId = newRecord.id;
+
+      // JSON body field populated by CS on saveRecord
+      const componentLotsJson =
+        newRecord.getValue("custbody_cwgp_componentlots_json") || "[]";
+
+      let componentLots = [];
+      try {
+        componentLots = JSON.parse(componentLotsJson) || [];
+      } catch (parseError) {
+        log.error(functionName, {
+          error: "Invalid JSON in custbody_cwgp_componentlots_json",
+          componentLotsJson,
+          parseError,
+        });
+        return;
+      }
+
+      if (!componentLots.length) {
+        log.audit(functionName, "No component lots to process.");
+        return;
+      }
+      const objParams = {
+        action: "createLotTraceability",
+        dataObj: JSON.stringify({
+          assemblyId,
+          componentLots: componentLots,
+        }),
+      };
+      let objResponse = https.requestSuitelet({
+        scriptId: "customscript_olipop_sl_custom_function",
+        deploymentId: "customdeploy_olipop_sl_custom_function",
+        body: objParams,
+        method: https.Method.POST,
+      });
+
+      log.audit(functionName, { objResponse });
+
+      // Call suitelet (fire & log response)
+
+      log.audit(functionName, {
+        responseCode: objResponse.code,
+        responseBody: (objResponse.body || "").substring(0, 1000),
+        assemblyId,
+        lineCount: componentLots.length,
+      });
+
+      record.submitFields({
+        type: record.Type.ASSEMBLY_BUILD,
+        id: assemblyId,
+        values: {
+          custbody_cwgp_componentlots_json: "",
+        },
+        options: { enableSourcing: false, ignoreMandatoryFields: true },
+      });
+
+      log.audit(functionName, "END");
+    } catch (error) {
+      log.error(functionName, { error: error.message, stack: error.stack });
+    }
+  };
+
+  return { beforeLoad, afterSubmit };
 });
